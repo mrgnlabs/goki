@@ -8,11 +8,6 @@ import log from "loglevel";
 
 import { loadSDK, loadWalletKey, programCommand } from "./helpers";
 
-// import { Provider as SaberProvider, SolanaProvider, SignerWallet } from "@saberhq/solana-contrib";
-// import fs from 'fs';
-
-// import { GokiSDK } from '../sdk';
-
 program.version("0.0.1");
 
 log.setLevel(log.levels.INFO);
