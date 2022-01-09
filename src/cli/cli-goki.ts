@@ -12,10 +12,10 @@ program.version("0.0.1");
 
 log.setLevel(log.levels.INFO);
 
-programCommand("create_new_wallet")
+programCommand("create_wallet")
   .requiredOption("-o, --owners <strings...>", "Array of owner public keys")
   .requiredOption("-t, --threshold <number>", "m")
-  .requiredOption("-n, --numOwners <number>", "n")
+  .requiredOption("-n, --num-owners <number>", "n")
   .option("-b, --base <path>", "Base keypair")
   .option("-d, --delay <number>", "Timelock delay in seconds")
   .action(async (_, cmd: Command) => {
@@ -35,11 +35,15 @@ programCommand("create_new_wallet")
       owners: string[];
       threshold: anchor.BN;
       numOwners: number;
-      base?: Keypair;
+      base?: string;
       delay?: anchor.BN;
     } = cmd.opts();
 
-    const walletKeyPair = loadWalletKey(keypair);
+    const walletKeyPair: Keypair = loadWalletKey(keypair);
+    const baseKeyPair: Keypair | undefined = base
+      ? loadWalletKey(base)
+      : undefined;
+
     const goki = loadSDK({
       keypair: walletKeyPair,
       env,
@@ -50,7 +54,7 @@ programCommand("create_new_wallet")
       owners: ownerKeys,
       threshold,
       numOwners,
-      base,
+      base: baseKeyPair,
       delay,
     });
     log.info(
@@ -84,7 +88,7 @@ programCommand("create_subaccount")
     if (!(type === "derived" || type === "ownerInvoker")) {
       throw Error("`type` much be either 'derived' or 'ownerInvoker'");
     }
-    const walletKeyPair = loadWalletKey(keypair);
+    const walletKeyPair: Keypair = loadWalletKey(keypair);
     const goki = loadSDK({
       keypair: walletKeyPair,
       env,
