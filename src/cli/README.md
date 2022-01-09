@@ -17,10 +17,10 @@ Optional:
 - `-e, --env <string>`: The Solana cluster environment name.
 
   - Supports:
-    - `'mainnet-beta'`
-    - `'devnet'`
-    - `'testnet'`
-  - Default: `'devnet'`
+    - `"mainnet-beta"`
+    - `"devnet"`
+    - `"testnet"`
+  - Default: `"devnet"`
 
 - `-r, --rpc-url <string>`: An opportunity to run commands with arbitrary RPC resoruces. Commands in this CLI are not compute-intensive so this is not considered required, but included here as an option for extensibility.
 
