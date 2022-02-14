@@ -20,20 +20,14 @@
 //! signed.
 #![deny(rustdoc::all)]
 #![allow(rustdoc::missing_doc_code_examples)]
+#![deny(clippy::unwrap_used)]
 
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program;
-use anchor_lang::Key;
-use std::convert::Into;
-use vipers::invariant;
-use vipers::unwrap_int;
-use vipers::unwrap_or_err;
-use vipers::validate::Validate;
+use vipers::{invariant, unwrap_int, validate::Validate};
 
 mod events;
-mod smart_wallet_utils;
 mod state;
-mod transaction;
 mod validators;
 
 pub use events::*;
@@ -69,7 +63,7 @@ pub mod smart_wallet {
         minimum_delay: i64,
     ) -> ProgramResult {
         invariant!(minimum_delay >= 0, "delay must be positive");
-        require!(minimum_delay < MAX_DELAY_SECONDS, DelayTooHigh);
+        invariant!(minimum_delay < MAX_DELAY_SECONDS, DelayTooHigh);
 
         invariant!((max_owners as usize) >= owners.len(), "max_owners");
 
@@ -121,7 +115,7 @@ pub mod smart_wallet {
     /// change_threshold.
     #[access_control(ctx.accounts.validate())]
     pub fn change_threshold(ctx: Context<Auth>, threshold: u64) -> ProgramResult {
-        require!(
+        invariant!(
             threshold <= ctx.accounts.smart_wallet.owners.len() as u64,
             InvalidThreshold
         );
@@ -160,7 +154,7 @@ pub mod smart_wallet {
         let clock = Clock::get()?;
         let current_ts = clock.unix_timestamp;
         if smart_wallet.minimum_delay != 0 {
-            require!(
+            invariant!(
                 eta >= unwrap_int!(current_ts.checked_add(smart_wallet.minimum_delay as i64)),
                 InvalidETA
             );
@@ -169,7 +163,7 @@ pub mod smart_wallet {
             invariant!(eta >= 0, "ETA must be positive");
             let delay = unwrap_int!(eta.checked_sub(current_ts));
             invariant!(delay >= 0, "ETA must be in the future");
-            require!(delay <= MAX_DELAY_SECONDS, DelayTooHigh);
+            invariant!(delay <= MAX_DELAY_SECONDS, DelayTooHigh);
         }
 
         // generate the signers boolean list
@@ -306,6 +300,53 @@ pub mod smart_wallet {
         Ok(())
     }
 
+    /// Invokes an arbitrary instruction as a PDA derived from the owner,
+    /// i.e. as an "Owner Invoker".
+    ///
+    /// This is useful for using the multisig as a whitelist or as a council,
+    /// e.g. a whitelist of approved owners.
+    ///
+    /// # Arguments
+    /// - `index` - The index of the owner-invoker.
+    /// - `bump` - Bump seed of the owner-invoker.
+    /// - `invoker` - The owner-invoker.
+    /// - `data` - The raw bytes of the instruction data.
+    #[access_control(ctx.accounts.validate())]
+    pub fn owner_invoke_instruction_v2(
+        ctx: Context<OwnerInvokeInstruction>,
+        index: u64,
+        bump: u8,
+        invoker: Pubkey,
+        data: Vec<u8>,
+    ) -> ProgramResult {
+        let smart_wallet = &ctx.accounts.smart_wallet;
+        // Execute the transaction signed by the smart_wallet.
+        let invoker_seeds: &[&[&[u8]]] = &[&[
+            b"GokiSmartWalletOwnerInvoker" as &[u8],
+            &smart_wallet.key().to_bytes(),
+            &index.to_le_bytes(),
+            &[bump],
+        ]];
+
+        let program_id = ctx.remaining_accounts[0].key();
+        let accounts: Vec<AccountMeta> = ctx.remaining_accounts[1..]
+            .iter()
+            .map(|v| AccountMeta {
+                pubkey: *v.key,
+                is_signer: if v.key == &invoker { true } else { v.is_signer },
+                is_writable: v.is_writable,
+            })
+            .collect();
+        let ix = &solana_program::instruction::Instruction {
+            program_id,
+            accounts,
+            data,
+        };
+
+        solana_program::program::invoke_signed(ix, ctx.remaining_accounts, invoker_seeds)?;
+        Ok(())
+    }
+
     /// Creates a struct containing a reverse mapping of a subaccount to a
     /// [SmartWallet].
     #[access_control(ctx.accounts.validate())]
@@ -378,6 +419,7 @@ pub struct CreateSmartWallet<'info> {
 /// Accounts for [smart_wallet::set_owners] and [smart_wallet::change_threshold].
 #[derive(Accounts)]
 pub struct Auth<'info> {
+    /// The [SmartWallet].
     #[account(mut, signer)]
     pub smart_wallet: Account<'info, SmartWallet>,
 }
@@ -444,6 +486,15 @@ pub struct OwnerInvokeInstruction<'info> {
     pub owner: Signer<'info>,
 }
 
+/// Accounts for [smart_wallet::owner_invoke_instruction].
+#[derive(Accounts)]
+pub struct OwnerInvokeInstructionV2<'info> {
+    /// The [SmartWallet].
+    pub smart_wallet: Account<'info, SmartWallet>,
+    /// An owner of the [SmartWallet].
+    pub owner: Signer<'info>,
+}
+
 /// Accounts for [smart_wallet::create_subaccount_info].
 #[derive(Accounts)]
 #[instruction(bump: u8, subaccount: Pubkey)]
@@ -485,6 +536,7 @@ fn do_execute_transaction(ctx: Context<ExecuteTransaction>, seeds: &[&[&[u8]]]) 
     Ok(())
 }
 
+/// Program errors.
 #[error]
 pub enum ErrorCode {
     #[msg("The given owner is not part of this smart wallet.")]

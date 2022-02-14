@@ -1,7 +1,6 @@
 use crate::InvokeSignedInstruction;
 use anchor_lang::prelude::*;
-use anchor_spl::token;
-use vipers::{assert_keys_eq, assert_owner, validate::Validate};
+use vipers::{assert_keys_eq, invariant, validate::Validate};
 
 impl<'info> Validate<'info> for InvokeSignedInstruction<'info> {
     fn validate(&self) -> ProgramResult {
@@ -12,11 +11,8 @@ impl<'info> Validate<'info> for InvokeSignedInstruction<'info> {
             "owner_authority"
         );
 
-        // NFT account must be associated with the token program.
-        assert_owner!(self.nft_account, token::ID);
-
         // Check NFT ownership.
-        require!(self.nft_account.amount == 1, Unauthorized);
+        invariant!(self.nft_account.amount == 1, Unauthorized);
 
         Ok(())
     }
