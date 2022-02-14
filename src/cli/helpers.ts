@@ -1,6 +1,7 @@
 import * as anchor from "@project-serum/anchor";
 import type { Provider as SaberProvider } from "@saberhq/solana-contrib";
 import { SignerWallet, SolanaProvider } from "@saberhq/solana-contrib";
+import type { PublicKey } from "@solana/web3.js";
 import { Keypair } from "@solana/web3.js";
 import { program } from "commander";
 import fs from "fs";
@@ -28,7 +29,7 @@ function getProvider({
   env: string;
   rpcUrl?: string;
 }): SaberProvider {
-  if (rpcUrl) console.log("USING CUSTOM URL", rpcUrl);
+  if (rpcUrl) log.info("USING CUSTOM URL", rpcUrl);
 
   const connStr: string = rpcUrl || getCluster(env);
   const solConnection = new anchor.web3.Connection(connStr);
@@ -42,6 +43,20 @@ function getProvider({
   });
 
   return saberProvider;
+}
+
+export function loadWalletKey(keypair: string): Keypair {
+  if (!keypair || keypair === "") {
+    throw new Error("Keypair is required!");
+  }
+
+  function loadPK(): Array<number> {
+    return JSON.parse(fs.readFileSync(keypair).toString()) as Array<number>;
+  }
+  const loaded: Keypair = Keypair.fromSecretKey(new Uint8Array(loadPK()));
+  log.info(`wallet public key: ${loaded.publicKey.toString()}`);
+
+  return loaded;
 }
 
 export function loadSDK({
@@ -62,18 +77,39 @@ export function loadSDK({
   return GokiSDK.load({ provider });
 }
 
-export function loadWalletKey(keypair: string): Keypair {
-  if (!keypair || keypair === "") {
-    throw new Error("Keypair is required!");
-  }
+export async function loadSmartWallet({
+  goki,
+  pubkey,
+}: {
+  goki: GokiSDK;
+  pubkey: PublicKey;
+}) {
+  const smartWallet = await goki.loadSmartWallet(pubkey);
+  return smartWallet;
+}
 
-  function loadPK(): Array<number> {
-    return JSON.parse(fs.readFileSync(keypair).toString()) as Array<number>;
-  }
-  const loaded: Keypair = Keypair.fromSecretKey(new Uint8Array(loadPK()));
-  log.info(`wallet public key: ${loaded.publicKey.toString()}`);
-
-  return loaded;
+export async function loadSmartWalletFromScratch({
+  keypair,
+  smartWalletPubkey,
+  env,
+  rpcUrl,
+}: {
+  keypair: string;
+  smartWalletPubkey: string;
+  env: string;
+  rpcUrl?: string;
+}) {
+  const walletKeyPair: Keypair = loadWalletKey(keypair);
+  const goki = loadSDK({
+    keypair: walletKeyPair,
+    env,
+    rpcUrl,
+  });
+  const smartWallet = await loadSmartWallet({
+    goki,
+    pubkey: smartWalletPubkey,
+  });
+  return smartWallet;
 }
 
 export function programCommand(name: string) {

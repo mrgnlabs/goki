@@ -1,12 +1,14 @@
 #!/usr/bin/env ts-node
-import type * as anchor from "@project-serum/anchor";
-import type { Keypair } from "@solana/web3.js";
-import { PublicKey } from "@solana/web3.js";
 import type { Command } from "commander";
 import { program } from "commander";
 import log from "loglevel";
 
-import { loadSDK, loadWalletKey, programCommand } from "./helpers";
+import {
+  createSubAccountCmd,
+  createWalletCmd,
+  newSOLTransferTransaction,
+} from "./commands";
+import { programCommand } from "./helpers";
 
 program.version("0.0.1");
 
@@ -19,90 +21,61 @@ programCommand("create_wallet")
   .option("-b, --base <path>", "Base keypair")
   .option("-d, --delay <number>", "Timelock delay in seconds")
   .action(async (_, cmd: Command) => {
-    const {
-      env,
-      keypair,
-      rpcUrl,
-      owners,
-      threshold,
-      numOwners,
-      base,
-      delay,
-    }: {
-      env: string;
-      keypair: string;
-      rpcUrl?: string;
-      owners: string[];
-      threshold: anchor.BN;
-      numOwners: number;
-      base?: string;
-      delay?: anchor.BN;
-    } = cmd.opts();
-
-    const walletKeyPair: Keypair = loadWalletKey(keypair);
-    const baseKeyPair: Keypair | undefined = base
-      ? loadWalletKey(base)
-      : undefined;
-
-    const goki = loadSDK({
-      keypair: walletKeyPair,
-      env,
-      rpcUrl,
-    });
-    const ownerKeys = owners.map((k) => new PublicKey(k));
-    const smartWallet = await goki.newSmartWallet({
-      owners: ownerKeys,
-      threshold,
-      numOwners,
-      base: baseKeyPair,
-      delay,
-    });
-    log.info(
-      `SmartWallet successfully created. PublicKey: ${smartWallet.smartWalletWrapper.key.toString()}`
-    );
+    await createWalletCmd(cmd);
   });
 
 programCommand("create_subaccount")
-  .requiredOption("-s, --smart-wallet <string>", "SmartWallet PublicKey")
+  .requiredOption("-s, --smart-wallet <string>", "Smart Wallet PublicKey")
   .requiredOption("-i, --index <number>")
   .requiredOption("-t, --type <string>")
   .option("-p, --payer <string>", "Payer PublicKey")
   .action(async (_, cmd: Command) => {
-    const {
-      env,
-      keypair,
-      rpcUrl,
-      smartWallet,
-      index,
-      type,
-      payer,
-    }: {
-      env: string;
-      keypair: string;
-      rpcUrl?: string;
-      smartWallet: string;
-      index: number;
-      type: string;
-      payer?: string;
-    } = cmd.opts();
-    if (!(type === "derived" || type === "ownerInvoker")) {
-      throw Error("`type` much be either 'derived' or 'ownerInvoker'");
-    }
-    const walletKeyPair: Keypair = loadWalletKey(keypair);
-    const goki = loadSDK({
-      keypair: walletKeyPair,
-      env,
-      rpcUrl,
-    });
-
-    await goki.createSubaccountInfo({
-      smartWallet: new PublicKey(smartWallet),
-      index,
-      type,
-      payer: payer ? new PublicKey(payer) : undefined,
-    });
-    // @todo improve logging here.
-    log.info("New subaccount created.");
+    await createSubAccountCmd(cmd);
   });
+
+programCommand("transfer_SOL")
+  .requiredOption("-s, --smart-wallet <string>", "Smart Wallet PublicKey")
+  .requiredOption("-t, --to <string>", "SOL Recipient PublicKey")
+  .option("-o, --proposer <string>", "Proposer PublicKey")
+  .option("-p, --payer <string>", "Payer PublicKey")
+  .option("-a, --eta <number>", "Timelock delay") // @todo figure out how eta is represented and improve helper note
+  .action(async (_, cmd: Command) => {
+    await newSOLTransferTransaction(cmd);
+  });
+
+programCommand("transfer_SPL_token")
+  .requiredOption("-s, --smart-wallet <string>", "Smart Wallet PublicKey")
+  .requiredOption("-t, --to <string>", "SOL Recipient PublicKey")
+  .requiredOption("-m, --mint <string>", "SPL token mint PublicKey")
+  .option("-o, --proposer <string>", "Proposer PublicKey")
+  .option("-p, --payer <string>", "Payer PublicKey")
+  .option("-a, --eta <number>", "Timelock delay") // @todo figure out how eta is represented and improve helper note
+  .action(async (_, cmd: Command) => {
+    await newSOLTransferTransaction(cmd);
+  });
+
+// programCommand("new_transaction");
+
+// programCommand("new_transaction_from_envelope");
+
+// programCommand("fetch_transaction_by_index");
+
+// programCommand("fetch_transaction");
+
+// programCommand("approve_transaction");
+
+// programCommand("execute_transaction");
+
+// programCommand("find_wallet_derived_address");
+
+// programCommand("findOwnerInvokerAddress");
+
+// programCommand("execute_transaction_derived");
+
+// programCommand("owner_invoke_instruction");
+
+// programCommand("set_owners");
+
+// programCommand("change_threshold");
 
 program.parse(process.argv);
